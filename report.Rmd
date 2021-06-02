@@ -1,0 +1,168 @@
+---
+title: "Practical Machine Learning Project"
+output: html_document
+---
+
+<style type="text/css">
+        body {
+        font-family: "PT Sans"; 
+        font-size: 14px; 
+        font-style: normal; 
+        font-variant: normal; 
+        font-weight: 400; 
+        line-height: 20px;
+        text-align: justify;
+        }
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Packages Required
+
+All packages required for the project are loaded below.
+
+```{r}
+library(caret)
+library(rattle)
+library(e1071)
+```
+
+## Reading in the Data
+
+A training set CSV and a test set CSV are available. I shall use the test set CSV as my validation set and hold it out until the very end of the model-building. The training set CSV shall be split into a training set and a test set. The variables are named accordingly.
+
+```{r}
+trainingCSV<-read.csv(file=url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"), header=TRUE)
+validation<-read.csv(file=url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"), header=TRUE)
+```
+
+Explore the structure of both datasets.
+
+```{r}
+str(trainingCSV)
+```
+
+```{r}
+str(validation)
+```
+
+## Data Wrangling
+
+The output from str() above shows that there are three categories of columns in the training set which are unnecessary variables and need to be removed before fitting a model. 
+
+* Firstly, there are some columns containing almost exclusively NA values. 
+* Secondly, the first 7 columns contain metadata which has no use for prediction.
+* Thirdly, some columns may be vectors with a variance of almost zero.  
+
+The data wrangling procedure to remove all such columns is done below. 
+
+```{r}
+# Remove columns which have at least 90 % missing values
+trainingCSV<-trainingCSV[, colMeans(is.na(trainingCSV))<0.9]
+```
+
+```{r}
+# Remove the first 7 columns, as they contain unnecessary metadata
+trainingCSV<-trainingCSV[, -c(1:7)]
+```
+
+```{r}
+# Remove variables with a near-zero variance
+nzv<-nearZeroVar(x=trainingCSV)
+trainingCSV<-trainingCSV[, -nzv]
+```
+
+Let us see how many columns we're left with after wrangling.
+
+```{r}
+dim(trainingCSV)
+```
+
+Wrangling has taken us from 160 variables to 53 variables.
+
+## Create Data Partitions
+
+First, I split the training set CSV into a training set and a test set. The "classe" variable is the outcome variable.
+
+```{r}
+inTraining<-createDataPartition(y=trainingCSV$classe, p=0.75, list=FALSE)
+training<-trainingCSV[inTraining, ]
+test<-trainingCSV[-inTraining, ]
+```
+
+Secondly, I set up control for 5-fold cross-validation.
+
+```{r}
+control<-trainControl(method="cv", number=5)
+```
+
+## Decision Tree
+
+The first model I will build is the decision tree. The model is trained on the training set below.
+
+```{r}
+treeModel<-train(classe~., data=training, method="rpart", trControl=control)
+```
+
+The summary of the fitted model is visualized by a fancy plot.
+
+```{r}
+fancyRpartPlot(model=treeModel$finalModel)
+```
+
+The cross-validation accuracy plot of the model is shown below.
+
+```{r}
+plot(treeModel)
+```
+
+I now use the fitted model to make predictions on the test set and evaluate the accuracy of the predictions.
+
+```{r}
+predictTree<-predict(object=treeModel, newdata=test)
+confMatTree<-confusionMatrix(data=predictTree, reference=factor(test$classe))
+
+confMatTree
+```
+
+I obtain an accuracy of 48.04 % but want more. I hence fit a random forest model next.
+
+## Random Forest
+
+The second model I will build is the decision tree. The model is trained on the training set below.
+
+```{r}
+forestModel<-train(classe~., data=training, method="rf", trControl=control)
+```
+
+The cross-validation accuracy plot of the model is shown below.
+
+```{r}
+plot(forestModel)
+```
+
+I now use the fitted model to make predictions on the test set and evaluate the accuracy of the predictions.
+
+```{r}
+predictForest<-predict(object=forestModel, newdata=test)
+confMatForest<-confusionMatrix(data=predictForest, reference=factor(test$classe))
+
+confMatForest
+```
+
+I obtain an accuracy of 99.55 %, which is perfectly satisfactory. The out-of-sample error is hence 0.45 %.
+
+## Predictions on the Validation Set
+
+I've selected the random forest model as the best model to make predictions on the validation set, which I've been holding out all this while. These predictions are made below.
+
+```{r}
+predictValidation<-predict(object=forestModel, newdata=validation)
+
+predictValidation
+```
+
+
+
